@@ -1,0 +1,816 @@
+/* Oberflaeche der Kartensammlung – läuft im Rahmen (siehe Skripte/rahmen.js).
+   Kein Obsidian-DOM, darum keine .markdown-preview-sizer- oder .cm-*-Selektoren.
+   Gestaltung nach Vorgaben: Buehne #131313, Karte #1e1e1e, Kontur #2e2e2e,
+   Radius 20 px, Akzent Blau #5b9cff, Innenrundung = Aussenrundung minus Abstand. */
+
+:root{
+  /* Die Bedienelemente, die der Browser selbst malt, muessen die dunkle Buehne kennen.
+     Ohne diese Zeile stand `color-scheme` im Rahmen auf `normal`, und Chromium zeichnete
+     sie in Hell-Optik: Das Kalendersymbol des Datumsfelds war rgb(0,0,0) auf rgb(26,26,26)
+     - Kontrast 1,1:1, der einzige Knopf des Feldes unsichtbar (gemeldet 16.09.2026).
+     Betroffen waren ebenso die Aufklapplisten aller <select>, das Loeschkreuz des
+     Suchfelds und die Auswahlfarbe. Eine Zeile deckt alle ab. */
+  color-scheme:dark;
+  --buehne:#131313; --karte:#1e1e1e; --karte2:#1a1a1a; --kontur:#2e2e2e; --kontur2:#2a2a2a;
+  --schrift:#e9e9e9; --leise:#9a9a9a; --still:#6f6f6f; --weiss:#fff;
+  --blau:#5b9cff; --blau1:#3b82f6; --blau2:#1e5bd8; --hell:#dbeafe;
+  --gruen:#51cf66; --rot:#ff6b6b;
+  --radius:20px; --radius-innen:12px;
+}
+*{box-sizing:border-box}
+/* [hidden] verliert gegen jede display-Regel (.ks-album__karte ist display:block). Ohne das
+   hier war die Album-Suche wirkungslos: hidden gesetzt, Kachel trotzdem sichtbar. */
+[hidden]{display:none!important}
+html,body{margin:0;height:100%}
+body{background:var(--buehne);color:var(--schrift);
+  font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  overflow-y:auto;overflow-x:hidden;
+  container-type:inline-size;container-name:seite}
+a{color:inherit;text-decoration:none}
+img{max-width:100%}
+/* Kein sichtbarer Scrollbalken im Rahmen: er nahm 10 px Breite weg (ohne eigene Regel
+   wären es sogar 15) und stand als zweiter Balken neben Obsidians eigenem. Gescrollt wird
+   unveraendert mit Rad, Trackpad, Tastatur und Programmierung - nur die Leiste ist fort. */
+::-webkit-scrollbar{display:none}
+html{scrollbar-width:none}
+/* Statt des Systembalkens eine eigene Bahn, die sich nur beim Scrollen zeigt und keine
+   Breite wegnimmt (rahmen.js hängt sie an). Der Systembalken nahm 10 px weg und stand
+   als zweite Bahn neben Obsidians eigener. */
+.ks-scrollbahn{position:absolute;right:4px;width:7px;border-radius:4px;background:#585858;
+  opacity:0;transition:opacity .25s;pointer-events:none;z-index:70}
+.ks-scrollbahn--an{opacity:.8}
+@media (prefers-reduced-motion:reduce){ .ks-scrollbahn{transition:none} }
+
+/* ---- Grundgeruest: Navi links, Inhalt rechts --------------------------------------------- */
+.ks-seite{display:grid;grid-template-columns:220px minmax(0,1fr);gap:16px;padding:16px 24px 40px;align-items:start}
+.ks-seite__inhalt{min-width:0;display:grid;gap:16px;align-content:start}
+.ks-seite__inhalt>*{min-width:0}
+
+/* ---- Navigation -------------------------------------------------------------------------- */
+.ks-navi{position:sticky;top:16px;background:var(--karte2);border:1px solid var(--kontur2);
+  border-radius:var(--radius);padding:18px 12px;display:flex;flex-direction:column;gap:4px;
+  box-shadow:0 10px 28px rgba(0,0,0,.45)}
+.ks-navi__gruppe{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--still);padding:2px 12px 4px}
+.ks-navi__punkt{display:flex;align-items:center;gap:8px;border-radius:var(--radius-innen);
+  padding:10px 12px;color:#c9c9c9;transition:background .15s,color .15s;cursor:pointer}
+.ks-navi__punkt:hover{background:var(--kontur2);color:var(--weiss)}
+/* Der aktive Punkt traegt seit 19.09.2026 denselben blauen Verlauf wie die Knoepfe
+   (Marks Wort: "hinterleg das mal mit unserem tollen blau wie bei den buttons") - eine
+   Farbe fuer "hier bist du" und "hier kannst du klicken". Vorher war er nur etwas heller
+   als der Hintergrund und ging neben den Knoepfen unter. */
+/* Die Fassung ganz unten in der Navi (19.09.2026): so leise wie moeglich, aber immer da -
+   ohne eigene App ist sie die einzige Stelle, an der ein Kaeufer seinen Stand ablesen kann. */
+.ks-navi__fassung{display:block;margin-top:auto;padding:14px 12px 2px;font-size:11px;color:var(--still);
+  letter-spacing:.04em;font-variant-numeric:tabular-nums;text-decoration:none;transition:color .15s}
+.ks-navi__fassung:hover{color:var(--hell)}
+/* Textblöcke auf der Über-Seite: Fließtext, kein Dashboard - darum eine lesbare Zeilenlänge
+   und mehr Luft zwischen den Absätzen als sonst im Haus. */
+/* ---- Startseite (19.09.2026) ---------------------------------------------------------- */
+/* Drei Schritte in der Reihenfolge, in der man sie geht. Ein erledigter Schritt verschwindet
+   nicht, er wird leise: Haken statt Nummer, gedaempfte Schrift. Wer schon sammelt, sieht auf
+   einen Blick, dass hier nichts mehr zu tun ist. */
+.ks-start{display:flex;flex-direction:column}
+.ks-start__schritt{display:flex;align-items:flex-start;gap:16px;padding:18px 4px;text-decoration:none;
+  border-top:1px solid var(--kontur2);transition:background .15s}
+.ks-start__schritt:first-child{border-top:0}
+.ks-start__schritt:hover{background:var(--kontur2)}
+.ks-start__nr{flex:none;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  border:1px solid var(--kontur2);color:var(--still);font-weight:700;font-size:13px}
+.ks-start__schritt--fertig .ks-start__nr{border-color:transparent;background:var(--blau);color:#0d1b30}
+.ks-start__text{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.ks-start__titel{font-weight:700;color:var(--weiss);font-size:15px}
+.ks-start__schritt--fertig .ks-start__titel{color:var(--leise)}
+.ks-start__satz{font-size:13.5px;line-height:1.55;color:var(--still);overflow-wrap:anywhere}
+.ks-start__weg{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.ks-start__stand{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--still);white-space:nowrap}
+.ks-start__schritt--fertig .ks-start__stand{color:var(--blau)}
+.ks-start__knopf{font-size:12px;padding:6px 12px;white-space:nowrap}
+@media (max-width:640px){
+  .ks-start__schritt{flex-wrap:wrap}
+  .ks-start__weg{flex:1 1 100%;flex-direction:row;justify-content:flex-start;align-items:center;margin-left:44px}
+}
+
+.ks-ueber__text{font-size:14px;line-height:1.6;color:var(--leise);max-width:72ch}
+.ks-ueber__text p{margin:0 0 12px}
+.ks-ueber__text p:last-child{margin-bottom:0}
+.ks-ueber__text strong{color:var(--weiss);font-weight:600}
+.ks-navi__punkt--aktiv{background:linear-gradient(135deg,var(--blau1),var(--blau2));color:var(--weiss);font-weight:600}
+.ks-navi__punkt--aktiv:hover{background:linear-gradient(135deg,var(--blau1),var(--blau2));filter:brightness(1.12)}
+.ks-navi__icon{flex:none}
+.ks-navi__trenner{height:1px;background:var(--kontur2);margin:10px 8px}
+
+/* ---- Kopfzeile --------------------------------------------------------------------------- */
+.ks-kopf{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin:4px 2px 0;min-width:0;flex-wrap:wrap;row-gap:8px}
+.ks-kopf>*{min-width:0}
+.ks-kopf__label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--still)}
+.ks-kopf__titel{font-size:clamp(22px,2.4vw,32px);font-weight:750;color:var(--weiss);margin-top:2px;overflow-wrap:anywhere}
+.ks-kopf__punkt{display:inline-block;width:9px;height:9px;border-radius:50%;background:#2ecc71;margin-right:7px}
+
+/* ---- Karte (Fläche) --------------------------------------------------------------------- */
+.ks-flaeche{background:var(--karte);border:1px solid var(--kontur);border-radius:var(--radius);
+  padding:18px 20px;box-shadow:0 10px 28px rgba(0,0,0,.45)}
+.ks-flaeche__kopf{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;row-gap:10px;margin-bottom:12px;min-width:0}
+.ks-flaeche__kopf>*{min-width:0}
+.ks-flaeche__titel{font-size:16px;font-weight:700;color:var(--weiss)}
+
+/* ---- Kachelreihe (Dashboard) ------------------------------------------------------------- */
+.ks-kachelreihe{display:grid;grid-template-columns:repeat(auto-fit,minmax(176px,1fr));gap:14px}
+/* Hover NUR an Kacheln, die wirklich irgendwohin fuehren - daher a.ks-kachel statt
+   .ks-kachel (19.09.2026, Marks Wort "hier kein hover"). Die Kachel "Preise zuletzt
+   aktualisiert" ist seit demselben Tag ein <div> mit einem Knopf darin: Sie leuchtete beim
+   Ueberfahren blau auf und sah damit klickbar aus, obwohl nur der Knopf klickbar ist.
+   Derselbe Grund wie bei verkauften Exemplar-Zeilen (18.09.2026). */
+.ks-kachel{position:relative;display:block;background:var(--karte);border:1px solid var(--kontur);
+  border-radius:var(--radius);padding:18px 20px;min-height:118px;container-type:inline-size;
+  box-shadow:0 10px 28px rgba(0,0,0,.45);transition:border-color .18s,box-shadow .18s}
+a.ks-kachel{cursor:pointer}
+a.ks-kachel:hover{border-color:#4a4a4a;box-shadow:0 14px 34px rgba(0,0,0,.55)}
+.ks-kachel::before{content:"";position:absolute;inset:-1px;border-radius:var(--radius);opacity:0;pointer-events:none;
+  background:repeating-radial-gradient(circle at 108% -8%,rgba(255,255,255,.16) 0 1px,transparent 1px 13px),
+             linear-gradient(135deg,var(--blau1),var(--blau2));transition:opacity .25s}
+a.ks-kachel:hover::before{opacity:1}
+.ks-kachel>*{position:relative;z-index:1}
+
+/* ---- Rueckfrage (19.09.2026) --------------------------------------------------------------- */
+/* Eigener Dialog statt window.confirm: dessen Knoepfe heissen "Cancel" und "OK" und kommen
+   vom Betriebssystem (Marks Wort: "mach hier Abbrechen oder Ja"). Liegt ueber allem, auch
+   ueber der Bildlupe (z-index 70). Kein Blur (Performance-Regel), nur eine dunkle Flaeche. */
+.ks-dialog{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;
+  padding:24px;background:rgba(0,0,0,.62)}
+.ks-dialog__kasten{max-width:420px;width:100%;background:var(--karte);border:1px solid var(--kontur);
+  border-radius:var(--radius);padding:22px;box-shadow:0 24px 60px rgba(0,0,0,.6)}
+.ks-dialog__text{color:var(--weiss);font-size:15px;line-height:1.45;overflow-wrap:anywhere}
+.ks-dialog__knoepfe{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:10px;margin-top:20px}
+.ks-dialog__knoepfe .ks-knopf{font-size:13px;padding:8px 16px}
+@media (prefers-reduced-motion:no-preference){
+  .ks-dialog{animation:ks-dialog-auf .16s ease-out}
+  .ks-dialog__kasten{animation:ks-dialog-kasten .18s cubic-bezier(.22,1,.36,1)}
+}
+@keyframes ks-dialog-auf{from{opacity:0}to{opacity:1}}
+@keyframes ks-dialog-kasten{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
+.ks-kachel__label{font-size:13px;color:var(--leise);transition:color .25s}
+.ks-kachel__zahl{font-size:clamp(20px,13cqw,40px);font-weight:800;color:var(--weiss);line-height:1.1;
+  margin-top:8px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+/* Kleiner seit 19.09.2026 (Marks Wort: "insgesamt einfach die schrift kleiner") - diese
+   Kachel traegt Datum, Uhrzeit und das Wort "Uhr" in einer Zeile, die Zahl allein ist nicht
+   die Nachricht. */
+.ks-kachel__zahl--klein{font-size:clamp(14px,7cqw,21px);margin-top:14px}
+.ks-kachel__detail{font-size:12px;color:var(--still);margin-top:6px;transition:color .25s}
+/* Knopf in einer Kachel (19.09.2026, Marks Wort "den button dafuer haust du in die kachel
+   rein"): sitzt in der Detailzeile, darf aber nicht in ihrer Schriftgroesse schrumpfen. */
+/* Uhr hinter dem Zeitpunkt (19.09.2026): waechst mit der Zahl mit (em), sitzt auf der
+   Grundlinie und bleibt leise - sie begleitet die Zahl, sie steht nicht neben ihr. */
+.ks-kachel__zeit{white-space:nowrap}
+/* "Uhr" steht in derselben Schrift und Farbe wie die Zahl (Marks Wort 19.09.2026: "Uhr
+   sieht scheisse aus. einfach selbe schriftgroesse und farbe"). Die Klasse bleibt als
+   Ankerpunkt stehen, setzt aber nichts mehr. */
+.ks-kachel__uhrwort{}
+/* 12 px Luft zur Zahl darueber (Marks Wort 19.09.2026: "bisschen mehr margin zum button") */
+.ks-kachel__knopf{margin-top:12px;font-size:12px;padding:6px 12px}
+.ks-kachel__knopf:disabled{cursor:default}
+/* Fortschritt IM Knopf, waehrend die Preise laufen (Marks Wunsch 19.09.2026). Kein zweites
+   Element, sondern zwei Hintergrundebenen: Der Knopftext wird von seite-dashboard.js ueber
+   textContent gesetzt und wuerde jedes Kind-Element mitloeschen.
+   Der Knopf faellt beim Start auf Dunkelgrau und fuellt sich von links mit dem Blau, bis er
+   am Ende wieder der blaue Knopf ist, der er vorher war (Marks Wort 19.09.2026: "es waere
+   gut wenn der button dunkelgrau wird und sich mit unserem blau fuellt"). Der erste Bau
+   fuellte umgekehrt mit Weiss - der Knopf wurde dabei immer heller statt wieder blau.
+   Der Verlauf ist derselbe wie in .ks-knopf - wer ihn dort aendert, aendert ihn hier mit;
+   er steht zweimal, weil background-size nur Ebenen trifft, die hier genannt sind.
+   ZWEI Klassen im Selektor, nicht eine (Fehlermuster 9): .ks-knopf steht weiter unten in
+   dieser Datei und traegt die Kurzform `background` - bei gleicher Spezifitaet gewinnt die
+   spaetere Regel, und der Balken war unsichtbar (gemeldet 19.09.2026). */
+.ks-knopf.ks-knopf--fortschritt{
+  background-image:linear-gradient(135deg,var(--blau1),var(--blau2)),
+                   linear-gradient(var(--kontur),var(--kontur));
+  background-repeat:no-repeat;
+  background-size:var(--ks-fortschritt,0%) 100%,100% 100%;
+  transition:background-size .25s ease-out}
+.ks-knopf.ks-knopf--fortschritt:disabled{opacity:1}
+@media (prefers-reduced-motion:reduce){ .ks-knopf.ks-knopf--fortschritt{transition:none} }
+/* Auch diese Aufhellung nur an verlinkten Kacheln (19.09.2026, Marks Wort: "die ueberschrift
+   wird hell wenn man die kachel hovert"). Sie war beim Umbau auf a.ks-kachel uebersehen
+   worden - eine Regel von vieren blieb stehen, und genau sie traf die Beschriftung. */
+a.ks-kachel:hover .ks-kachel__label,a.ks-kachel:hover .ks-kachel__detail{color:var(--hell)}
+
+/* ---- Wertentwicklung --------------------------------------------------------------------- */
+.ks-graph__summe{font-size:clamp(26px,7cqw,36px);font-weight:800;color:var(--weiss);line-height:1.1;margin:4px 0 6px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.ks-graph__delta{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
+.ks-graph__delta--plus{color:var(--gruen)} .ks-graph__delta--minus{color:var(--rot)}
+.ks-graph__seit{font-size:12px;color:var(--still);margin-left:8px}
+/* Zukauf gegen Markt (19.09.2026): eigene Zeile unter der Veraenderung, leise - sie erklaert
+   die Zahl darueber und soll ihr nicht die Aufmerksamkeit nehmen. */
+.ks-graph__aufteilung{display:block;font-size:12px;color:var(--still);margin-top:3px}
+.ks-graph__schalter{display:flex;gap:4px;background:var(--karte2);border:1px solid var(--kontur2);border-radius:999px;padding:4px;flex-wrap:wrap}
+.ks-graph__schalter-knopf{font:inherit;font-size:12px;font-weight:700;color:var(--leise);background:none;border:0;
+  border-radius:999px;padding:6px 12px;cursor:pointer;transition:background .15s,color .15s}
+/* Kein Hover auf dem bereits gewaehlten Knopf: er wuerde seine Auswahl-Farbe ueberdecken
+   und so tun, als liesse sich hier noch etwas aendern (gemeldet 16.09.2026). */
+.ks-graph__schalter-knopf:not(.ks-graph__schalter-knopf--aktiv):hover{color:var(--weiss);background:var(--kontur2)}
+.ks-graph__schalter-knopf--aktiv{cursor:default}
+.ks-graph__schalter-knopf--aktiv{color:var(--hell);background:linear-gradient(135deg,var(--blau1),var(--blau2))}
+.ks-graph__buehne{position:relative;margin-top:6px;cursor:crosshair}
+.ks-graph__bild{display:block;width:100%;height:220px}
+.ks-graph__raster{stroke:var(--kontur2);stroke-width:1}
+/* Linksbuendig, damit die Zahlen mit der großen Zahl darüber fluchten (Wunsch
+   15.09.2026). Die 7 % sind die Breite, die die Zeichenflaeche links freilaesst. */
+.ks-graph__marke-y{position:absolute;left:0;width:7%;padding-right:8px;text-align:left;white-space:nowrap;
+  transform:translateY(-50%);font-size:11px;font-weight:600;color:var(--still);font-variant-numeric:tabular-nums;pointer-events:none}
+.ks-graph__marke-x{position:absolute;bottom:4px;font-size:11px;font-weight:600;color:var(--still);font-variant-numeric:tabular-nums;pointer-events:none}
+.ks-graph__kreuz{position:absolute;inset:0;opacity:0;transition:opacity .15s;pointer-events:none}
+.ks-graph__kreuz--an{opacity:1}
+.ks-graph__kreuz-linie{position:absolute;top:14px;bottom:26px;width:1px;background:#3f3f3f}
+.ks-graph__kreuz-punkt{position:absolute;width:11px;height:11px;border-radius:50%;border:2px solid var(--karte);transform:translate(-50%,-50%)}
+.ks-graph__kreuz-tip{position:absolute;top:0;transform:translateX(-50%);padding:5px 10px;border-radius:8px;
+  background:#262626;border:1px solid #343434;font-size:12px;font-weight:700;color:var(--schrift);white-space:nowrap;font-variant-numeric:tabular-nums}
+
+/* ---- Liste (Teuerste Karten) ------------------------------------------------------------- */
+.ks-zeile{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;
+  padding:10px 8px;margin:0 -8px;border-radius:var(--radius-innen);border-top:1px solid var(--kontur2);
+  transition:background .15s;cursor:pointer}
+.ks-zeile__bild,.ks-zeile__rang{flex:none}
+.ks-zeile__text{flex:1 1 150px}
+.ks-zeile .ks-zeile__wert{flex:none;margin-left:auto}
+.ks-zeile:hover{background:var(--kontur2)}
+.ks-zeile__bild{width:44px;height:61px;object-fit:cover;border-radius:4px;background:var(--karte2);display:block}
+.ks-zeile__rang{color:var(--still);font-weight:700;text-align:center;min-width:14px;font-variant-numeric:tabular-nums}
+.ks-zeile__text{min-width:0}
+.ks-zeile__name{display:block;font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ks-zeile__meta{display:block;font-size:12px;color:var(--leise);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ks-zeile__wert{font-size:14px;font-weight:700;color:var(--weiss);font-variant-numeric:tabular-nums;white-space:nowrap}
+/* Eigene Abwandlung statt der geborgten .ks-graph__delta--plus/--minus: die hat dieselbe
+   Spezifitaet (je eine Klasse) und steht früher in der Datei - die acht Prozentwerte unter
+   "Größte Bewegung" blieben dadurch weiß statt grün und rot (Fehlermuster 9).
+   Abwandlungen stehen darum immer NACH ihrer Grundregel, und ein Block borgt sich keine
+   Zustandsklasse aus einem fremden Block. */
+.ks-zeile__wert--plus{color:var(--gruen)} .ks-zeile__wert--minus{color:var(--rot)}
+
+/* ---- Exemplare ---------------------------------------------------------------------------- */
+/* Eine Zeile je Exemplar, im Stil der Dashboard-Liste - dieselbe Karte kann mehrfach im
+   Bestand sein, mit eigenem Zustand, Kaufpreis, Grading oder schon verkauft. */
+/* align-items:flex-start statt center (Marks Wort 18.09.2026: "preis auf eine hoehe"): Nummer,
+   Preis und Kreuz sitzen auf der Mitte des EINGABEFELDS, nicht auf der Mitte der Zeile.
+   Das Feld beginnt 19 px unter dem Zeilenanfang (Beschriftung 15 px + Luecke 4 px, gemessen)
+   und ist 31 px hoch; die Abstaende unten sind daraus gerechnet. */
+.ks-stueck{display:flex;align-items:flex-start;gap:12px;padding:10px 8px;margin:0 -8px;
+  border-top:1px solid var(--kontur2);border-radius:var(--radius-innen);
+  transition:background .15s,opacity .18s;min-width:0}
+.ks-stueck:hover{background:var(--kontur2)}
+.ks-stueck--verkauft{opacity:.55}
+/* frisch angelegtes Exemplar kurz hervorheben, damit man sieht, was passiert ist */
+.ks-stueck--neu{background:rgba(91,156,255,.14);box-shadow:inset 3px 0 0 var(--blau);
+  animation:ks-stueck-neu 1.2s ease-out}
+@keyframes ks-stueck-neu{0%{background:rgba(91,156,255,.3)}100%{background:rgba(91,156,255,0)}}
+@media (prefers-reduced-motion:reduce){ .ks-stueck--neu{animation:none} }
+/* Verkaufte Zeilen reagieren nicht mehr auf den Zeiger (Marks Wort 18.09.2026: "hover immer
+   noch da wenn verkauft"): kein Hintergrund, keine Aufhellung. Steht NACH .ks-stueck:hover
+   und .ks-stueck--verkauft, gleiche Spezifitaet, spaetere Regel gewinnt (Fehlermuster 9). */
+.ks-stueck--verkauft:hover{opacity:.55;background:transparent}
+.ks-stueck__nr{flex:none;min-width:14px;color:var(--still);font-weight:700;text-align:center;
+  font-variant-numeric:tabular-nums;margin-top:24px}
+/* 16 px Zeilenabstand seit 19.09.2026 (vorher 8): Die Klammer um Verkaufspreis und
+   Verkaufsdatum gleicht mit -8 px ihr eigenes Polster aus und saesse in einer umgebrochenen
+   Zeile sonst direkt an der Zeile darueber. */
+.ks-stueck__felder{flex:1 1 auto;display:flex;flex-wrap:wrap;gap:16px 12px;min-width:0}
+/* max-width deckelt das Wachsen: Bricht ein Feld allein in die naechste Zeile um, zog es
+   sich bis zum rechten Rand (Marks Wort 18.09.2026: "verkauft da unten sieht haesslich
+   aus"). 260 px reichen jedem Feld; in einer vollen Zeile fuellen sechs Felder die Breite
+   weiter aus. */
+.ks-stueck__feld{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1 1 86px;max-width:260px}
+.ks-stueck__feld--schmal{flex:0 1 58px}
+/* Zwei Felder tragen laengere Werte als die uebrigen und brauchen eine groessere Basis,
+   sonst kappt der Kasten ohne Auslassungspunkte (Fehlermuster 13): das Datum, und die
+   Zertifikatsnummer mit zehn Ziffern (gemessen 95 px Tinte in 89 px Feld - die letzte
+   Ziffer fehlte). Beim Datum war es am 15.09.2026 behoben, beim Zertifikat uebersehen.
+   ACHTUNG, beim Datum zaehlt NICHT die Tinte: Seit es ein <input type="date"> ist, bringt
+   das Steuerelement eine eigene Mindestbreite mit - Spinner-Polster plus das 16 px breite
+   Kalendersymbol. Gemessen am Feld selbst mit width:auto (nicht am Text darin, das waere
+   Fehlermuster 3): mit Symbol 133 px, ohne 117 px, die Tinte "31.12.2026" nur 65 px. Mit
+   der alten Basis 104 px stand das Feld an vier von neun Pruefbreiten zu schmal, ohne dass
+   scrollWidth es gemeldet haette (bei date ist scrollWidth === clientWidth, immer). */
+.ks-stueck__feld:has(input[data-feld="verkauft"]){flex:1 1 133px}
+.ks-stueck__feld:has(input[data-feld="zertifikat"]){flex:1 1 116px}
+.ks-stueck__feld>span{font-size:10px;font-weight:600;color:var(--still);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Rueckweg fuer das Datumsfeld: ein beschrifteter Knopf unter dem Feld (18.09.2026). Der
+   erste Bau war ein Kreuz in der Beschriftung - Marks Wort: "ist zu unscheinbar". */
+.ks-stueck__zurueck{align-self:flex-start;margin-top:2px;font-size:11px;padding:4px 10px;white-space:nowrap}
+/* Verkaufspreis und Verkaufsdatum in EINER Klammer (19.09.2026, Marks Wort: "die beide bitte
+   in eine kachel damit man weiss die gehoeren zusammen"). Sie verhaelt sich in der Feldzeile
+   wie zwei Felder nebeneinander, traegt aber eine eigene, leicht abgesetzte Flaeche - und
+   den Ruecknahme-Knopf, der beide zugleich leert. */
+.ks-stueck__paar{display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px 10px;
+  flex:2 1 200px;min-width:min-content;max-width:530px;
+  /* Zwei Faelle, eine Regel (Marks Wort 19.09.2026: "da fehlt margin"): Steht die Klammer
+     NEBEN den anderen Feldern, muessen ihre Beschriftungen auf deren Hoehe liegen - dafuer
+     der negative Margin, der ihr eigenes Polster ausgleicht. Bricht sie in eine EIGENE
+     Zeile, klebte sie damit an der Zeile darueber; deshalb traegt .ks-stueck__felder jetzt
+     16 px Zeilenabstand, von denen hier 8 px uebrig bleiben. */
+  margin:-8px 0 0;padding:8px;border:1px solid var(--kontur2);border-radius:12px;
+  background:rgba(255,255,255,.015)}
+.ks-stueck__paar .ks-stueck__feld{flex:1 1 96px;max-width:none}
+/* Der Knopf darf nicht schmaler werden als sein Text (19.09.2026, von Mark gemeldet:
+   "siehst du den fehler unten bei verkauf zuruecknehmen"). Er stand vorher IN einem
+   .ks-stueck__feld, das mit min-width:0 unter seine Breite schrumpfte - der Knopf ragte
+   45 px heraus, quer unter die Wert-Spalte (gemessen bei 1210 px: Knopf 166, Feld 121).
+   In der Klammer bekommt er eine eigene Zeile ueber die volle Breite. */
+.ks-stueck__paar .ks-stueck__zurueck{flex:1 1 100%;max-width:max-content}
+.ks-stueck__feld:has(.ks-stueck__zurueck){min-width:min-content}
+/* (Kreuz-Knopf bleibt als Regel stehen, wird nicht mehr gerendert) */
+.ks-stueck__leeren{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;margin-left:4px;
+  vertical-align:middle;border:1px solid var(--kontur2);border-radius:50%;background:var(--karte2);color:var(--leise);
+  font:700 11px/1 inherit;padding:0;cursor:pointer;transition:background .15s,color .15s}
+.ks-stueck__leeren:hover{background:var(--rot);color:var(--weiss);border-color:var(--rot)}
+/* Hinweis unter einem Feld, wenn in der Notiz etwas steht, das die Anzeige nicht zeigen
+   kann - heute ein "Verkauft am", das kein Datum ist. Muss NACH .ks-stueck__feld>span
+   stehen UND das Elternteil im Selektor tragen: mit blossem .ks-stueck__hinweis (0,1,0)
+   gewinnt .ks-stueck__feld>span (0,1,1) und kappt den Satz nach einer Zeile
+   (Fehlermuster 9). Der Text bleibt kurz, damit er in die Spalte passt. */
+.ks-stueck__feld>.ks-stueck__hinweis{font-size:10px;font-weight:600;color:var(--rot);
+  white-space:normal;overflow:visible;overflow-wrap:anywhere}
+.ks-stueck__wert{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:3px;
+  font-size:13px;font-weight:700;color:var(--weiss);font-variant-numeric:tabular-nums;white-space:nowrap;margin-top:25px}
+.ks-stueck__marke{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--leise)}
+/* Kaufpreis gegen Wert (18.09.2026): Differenz je Exemplar unter dem Wert, in der Wert-Kachel
+   als Teil der Detailzeile. Eigene Zustandsklassen je Block (Fehlermuster 9b). */
+.ks-stueck__delta{font-size:11px;font-weight:700;font-variant-numeric:tabular-nums}
+.ks-stueck__delta--plus{color:var(--gruen)} .ks-stueck__delta--minus{color:var(--rot)}
+.ks-karte__delta{font-weight:700}
+.ks-karte__delta--plus{color:var(--gruen)} .ks-karte__delta--minus{color:var(--rot)}
+.ks-stueck__weg{flex:none;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;color:var(--still);font-size:13px;transition:background .15s,color .15s;margin-top:22px}
+a.ks-stueck__weg:hover{background:var(--rot);color:var(--weiss)}
+/* Filter ueber der Exemplar-Liste (18.09.2026): sitzt im Flaechenkopf zwischen Titel und
+   Knopf. Die Auswahl sieht aus wie die Album-Filter, nur kleiner - eigener Block, weil sie
+   in einem anderen Kopf lebt und dessen Hoehe nicht sprengen darf. */
+.ks-stueck-filter{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;margin:-2px 0 10px}
+.ks-stueck-filter>*{min-width:0}
+.ks-stueck-filter__wahl{font:inherit;font-size:12px;font-weight:600;color:var(--hell);
+  background:var(--karte2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23dbeafe' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6l6 -6'/%3E%3C/svg%3E") no-repeat right 9px center;
+  border:1px solid var(--kontur2);border-radius:999px;padding:6px 26px 6px 10px;cursor:pointer;
+  appearance:none;-webkit-appearance:none;transition:border-color .15s}
+.ks-stueck-filter__wahl:hover{border-color:#4a4a4a}
+.ks-stueck-filter__wahl:focus{outline:none;border-color:var(--blau)}
+.ks-stueck-filter__zahl{font-size:11px;font-weight:700;color:var(--still);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap}
+/* laufender Vorgang: der Knopf quittiert sofort, auch wenn mehrere Klicks anstehen */
+.ks-läuft{opacity:.4;pointer-events:none}
+
+/* ---- Preisbewegung ----------------------------------------------------------------------- */
+.ks-bewegung{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:8px 64px;
+  container-type:inline-size;container-name:bewegung}
+.ks-bewegung__spalte{min-width:0;position:relative}
+.ks-bewegung__spalte>.ks-kopf__label{margin-bottom:4px}
+.ks-bewegung__spalte .ks-zeile:first-of-type{border-top:0}
+/* Senkrechte Trennung zwischen "Gestiegen" und "Gefallen" (Auftrag A4): die Prozentzahl der
+   linken Spalte steht sonst direkt am Kartenbild der rechten und wird ihr zugeordnet.
+   Nur solange zwei Spalten NEBENEINANDER stehen - auto-fit bricht auf eine um, und ein fest
+   gesetzter Rand staende danach sinnlos links unter der ersten Spalte. auto-fit verrät dem
+   CSS den Umbruch nicht, darum trägt .ks-bewegung einen eigenen Container und die Abfrage
+   hängt an dessen Breite. 664 px ist die Kante: 300 (Mindestbreite einer Spalte) + 64
+   (gap) + 300. Im 1-px-Schritt über die Kante gemessen - bei 663 eine Spalte, ab 664 zwei.
+   ACHTUNG: Der Wert hängt am Spaltenabstand - als der von 28 auf 64 px wuchs, wanderte die
+   Kante mit, und der alte Wert liess den Strich in einer einspaltigen Fläche stehen. Wer
+   gap oder die 300 px ändert, misst diese Kante neu, und zwar im 1-px-Schritt: eine Probe
+   mit 10-px-Schritten trifft die Kante nicht und liess hier bis 15.09.2026 666 stehen, zwei
+   Pixel daneben - bei 664 und 665 standen zwei Spalten ohne Strich.
+   Der Strich liegt als ::before in der 64-px-Luecke bei left:-32px, also auf halber BREITE
+   des Zwischenraums - so ändert er keine Spaltenbreite und berührt keine Zeile. Dass
+   links 32 und rechts 31 px bleiben, ist der 1 px des Strichs selbst; mittig wäre -32.5px,
+   das aber auf einem 1x-Bildschirm über zwei Geraetepixel verwischt.
+   Grid streckt beide Spalten auf Zeilenhoehe, der Strich ist darum immer gleich lang. */
+@container bewegung (min-width:664px){
+  .ks-bewegung__spalte:nth-child(2)::before{content:"";position:absolute;left:-32px;top:0;bottom:0;
+    width:1px;background:var(--kontur)}
+}
+
+/* ---- Sets --------------------------------------------------------------------------------- */
+.ks-sets{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:10px 28px}
+.ks-sets__eintrag{min-width:0;padding:10px 0;border-top:1px solid var(--kontur2)}
+.ks-sets__kopf{display:flex;align-items:baseline;gap:12px}
+.ks-sets__name{font-size:14px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ks-sets__wert{margin-left:auto;flex:none;font-size:14px;font-weight:700;color:var(--weiss);font-variant-numeric:tabular-nums}
+.ks-sets__bahn{height:6px;border-radius:99px;background:var(--kontur2);margin:8px 0 6px;overflow:hidden}
+.ks-sets__fuellung{display:block;height:100%;border-radius:99px;
+  background:linear-gradient(90deg,var(--blau2),var(--blau));transition:width .3s}
+.ks-sets__fuss{display:flex;justify-content:space-between;gap:12px;font-size:12px;color:var(--leise)}
+
+/* ---- Filterleiste ------------------------------------------------------------------------ */
+.ks-filter{display:flex;flex-wrap:wrap;align-items:center;gap:8px;
+  background:var(--karte);border:1px solid var(--kontur);border-radius:var(--radius);
+  padding:12px 14px;box-shadow:0 10px 28px rgba(0,0,0,.45)}
+.ks-filter__suche{flex:1 1 220px;min-width:0;font:inherit;font-size:14px;color:var(--schrift);
+  background:var(--karte2);border:1px solid var(--kontur2);border-radius:var(--radius-innen);
+  padding:9px 13px;transition:border-color .15s}
+.ks-filter__suche:focus{outline:none;border-color:var(--blau)}
+.ks-filter__suche::placeholder{color:var(--still)}
+.ks-filter__suche::-webkit-search-cancel-button{filter:grayscale(1) brightness(2);cursor:pointer}
+/* Eigener Pfeil statt des Systempfeils: der klebt am rechten Rand, waehrend der Text
+   links 11 px Abstand hat - die Box wirkt dadurch schief (gemeldet 16.09.2026). Jetzt
+   sitzt der Pfeil mit denselben 11 px vom Rand wie der Text, das Polster rechts macht
+   ihm Platz. Gleiche Loesung wie bei select.ks-feld. */
+.ks-filter__wahl{flex:none;font:inherit;font-size:13px;font-weight:600;color:var(--hell);
+  background:var(--karte2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23dbeafe' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6l6 -6'/%3E%3C/svg%3E") no-repeat right 11px center;
+  border:1px solid var(--kontur2);border-radius:var(--radius-innen);
+  padding:9px 32px 9px 11px;cursor:pointer;transition:border-color .15s;
+  appearance:none;-webkit-appearance:none}
+/* Sprachen ohne Karte im Bestand stehen ausgegraut in der Liste (18.09.2026). Chromium
+   graut disabled-Optionen im Systemaufklapper selbst; die Regel setzt die Farbe zusaetzlich
+   fuer den Fall, dass der Rahmen die Liste selbst zeichnet. */
+.ks-filter__wahl option:disabled{color:var(--still)}
+.ks-filter__wahl:hover{border-color:#4a4a4a}
+.ks-filter__wahl:focus{outline:none;border-color:var(--blau)}
+.ks-filter__zahl{flex:none;margin-left:auto;font-size:12px;font-weight:700;color:var(--still);
+  text-transform:uppercase;letter-spacing:.06em;white-space:nowrap}
+
+/* ---- Album ------------------------------------------------------------------------------- */
+.ks-album{display:grid;grid-template-columns:repeat(auto-fill,minmax(172px,1fr));gap:14px}
+.ks-album__karte{position:relative;display:block;background:var(--karte);border:1px solid var(--kontur);
+  border-radius:var(--radius);padding:12px 12px 14px;box-shadow:0 10px 28px rgba(0,0,0,.45);
+  transition:border-color .18s,box-shadow .18s,transform .18s;cursor:pointer}
+.ks-album__karte:hover{border-color:#4a4a4a;box-shadow:0 16px 38px rgba(0,0,0,.6);transform:translateY(-2px)}
+.ks-album__bildbox{position:relative}
+.ks-album__bild{width:100%;aspect-ratio:63/88;object-fit:cover;border-radius:var(--radius-innen);background:var(--karte2);display:block}
+.ks-album__bild--leer{display:flex;align-items:center;justify-content:center;text-align:center;color:var(--still);font-size:12px;padding:12px;border:1px dashed var(--kontur)}
+.ks-album__name{font-weight:600;margin-top:10px;line-height:1.3;min-height:2.6em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ks-album__orig{font-size:12px;font-weight:500;color:var(--leise);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ks-album__meta{font-size:12px;color:var(--leise);margin-top:2px;display:flex;gap:5px;white-space:nowrap}
+.ks-album__set{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.ks-album__nummer{flex:none;color:var(--still);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.ks-album__wert{font-size:15px;font-weight:800;color:var(--weiss);margin-top:6px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+/* Der Grading-Chip kann eine Aufzaehlung tragen ("PSA 10 · BGS 9.5"), seit zwei
+   verschieden gegradete Exemplare beide Noten nennen statt "2 von 2 gegradet". Damit ein
+   langer Text die Kachel nicht sprengt, wird er hier gekappt - die vollstaendige Angabe
+   steht im Kopf der Karten-Ansicht. */
+.ks-album__chip{position:absolute;font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;
+  /* Kein backdrop-filter hier (entfernt 16.09.2026): Die Kachel darunter bewegt sich beim
+     Ueberfahren (.ks-album__karte:hover{transform:translateY(-2px)}), und "kein Blur ueber
+     Bewegtem" ist eine feste Regel. Der Grund bleibt ohne ihn lesbar - rgba(19,19,19,.85)
+     deckt schon fast vollstaendig. Die Lupe in seite-karte.js darf ihren Blur behalten:
+     sie liegt ueber einem stehenden Bild. */
+  background:rgba(19,19,19,.85);color:var(--hell);border:1px solid var(--blau1);
+  max-width:calc(100% - 16px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Verkaufte Karten bleiben im Album, treten aber zurück */
+.ks-album__karte--verkauft{opacity:.45}
+.ks-album__karte--verkauft:hover{opacity:.8}
+.ks-album__karte--verkauft .ks-album__bild{filter:grayscale(.85)}
+.ks-album__chip--verkauft{background:rgba(19,19,19,.9);border-color:#6f6f6f;color:var(--leise)}
+/* Vier Ecken, jede mit ihrem Namen. Frueher hiessen sie --links, --rechts und --unten;
+   dabei war "unten" in Wahrheit unten RECHTS, und der verkauft-Chip wurde per Inline-Stil
+   in dieselbe Ecke gesetzt - bei einer gegradeten verkauften Karte lagen beide Chips
+   uebereinander und die Note war weg. Jetzt sagt der Name die Ecke. */
+.ks-album__chip--oben-links{top:8px;left:8px}     .ks-album__chip--oben-rechts{top:8px;right:8px}
+.ks-album__chip--unten-links{bottom:8px;left:8px} .ks-album__chip--unten-rechts{bottom:8px;right:8px}
+
+/* ---- Karten-Ansicht ---------------------------------------------------------------------- */
+.ks-karte__oben{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,min(560px,38%));gap:16px;align-items:start}
+.ks-karte__bento{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;align-items:start;min-width:0}
+/* minmax(0,1fr) wie beim Bento darüber: ohne die Spaltenangabe hat das Raster eine
+   implizite Spalte, deren Breite das größte min-content der Kacheln bestimmt - die
+   Kacheln standen dann breiter als ihr eigener Behaelter (gemessen 15.09.2026: bei 375 px
+   Fenster 254 px Kachel in 235 px Spalte, 3 px Querscrollen). Fehlermuster 1. */
+.ks-karte__anzeige{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;align-content:start;min-width:0}
+.ks-karte__anzeige>*{min-width:0}
+.ks-karte__bearbeiten{display:grid;gap:12px;align-content:start}
+/* 190 px statt 150: die Spalte ist die Untergrenze, unter der die Sprache-Auswahl ihren
+   laengsten Eintrag abschneidet. Gerechnet und danach gemessen: "Koreanisch" 98,4 px Tinte
+   + 44 px Feldpolster + 2 px Feldrand + 36 px Kachelpolster + 2 px Kachelrand = 182,4 px.
+   Mit 150 px fiel "Deutsch" bei 1536 und 640 aus dem Feld - ein <select> meldet das nicht
+   (scrollWidth === clientWidth, Fehlermuster 13). */
+.ks-karte__reihe{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:12px}
+.ks-karte__kachel{background:var(--karte);border:1px solid var(--kontur);border-radius:var(--radius);padding:16px 18px;min-height:96px;box-shadow:0 10px 28px rgba(0,0,0,.45)}
+.ks-karte__kachel--akzent{border-color:transparent;background:repeating-radial-gradient(circle at 108% -8%,rgba(255,255,255,.12) 0 1px,transparent 1px 13px),linear-gradient(135deg,var(--blau1),var(--blau2))}
+.ks-karte__kachel--akzent .ks-karte__label,.ks-karte__kachel--akzent .ks-karte__detail{color:var(--hell)}
+.ks-karte__kachel--akzent .ks-karte__zahl{font-size:clamp(26px,3.2vw,40px)}
+.ks-karte__kachel--eingabe{background:var(--karte2);border-color:var(--kontur2);min-height:0}
+.ks-karte__marke{font-size:13px;font-weight:700;vertical-align:middle;margin-left:10px;
+  padding:4px 11px;border-radius:999px;text-transform:uppercase;letter-spacing:.06em}
+.ks-karte__marke--verkauft{background:var(--kontur2);color:var(--leise)}
+.ks-karte__label{font-size:12px;color:var(--leise);overflow-wrap:anywhere}
+.ks-karte__zahl{font-size:22px;font-weight:800;color:var(--weiss);line-height:1.15;margin-top:8px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;min-width:0}
+.ks-karte__reihe .ks-karte__zahl{font-size:17px;line-height:1.25;overflow-wrap:anywhere}
+.ks-karte__detail{font-size:12px;color:var(--still);margin-top:6px;overflow-wrap:anywhere}
+.ks-karte__leer{color:var(--still);font-weight:600}
+.ks-karte__text{font-size:14px;font-weight:400;color:var(--schrift)}
+.ks-karte__feldzeile{display:flex;align-items:baseline;gap:6px;margin-top:8px}
+.ks-karte__feldzeile span{font-size:22px;font-weight:800;color:var(--weiss)}
+.ks-feld{width:100%;max-width:150px;background:var(--karte2);font:inherit;font-size:22px;font-weight:800;
+  color:var(--weiss);border:1px solid var(--kontur);border-radius:10px;padding:2px 10px;font-variant-numeric:tabular-nums}
+.ks-feld:focus{outline:none;border-color:var(--blau)}
+.ks-feld::placeholder{color:var(--still)}
+/* 32 px rechts statt 40: der Pfeil ist 16 px breit und sitzt 12 px vom Rand, braucht also
+   28 px. Die 8 px Unterschied sind genau der Platz, der "Koreanisch" gefehlt hat. */
+select.ks-feld{max-width:100%;min-height:46px;font-size:18px;padding:8px 32px 8px 12px;cursor:pointer;
+  background:#131313 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6l6 -6'/%3E%3C/svg%3E") no-repeat right 12px center;
+  appearance:none;-webkit-appearance:none}
+.ks-feld--gemerkt{border-color:var(--gruen)!important}
+/* Festgestelltes Feld (Durchgang 19, Befund 2): Im Modus "verknuepfen" gehoert die Sprache
+   der Notiz, nicht der Suche - das Feld zeigt sie nur noch. Ohne eigene Regel saehe der
+   gesperrte Kasten aus wie ein offener: select.ks-feld setzt Grund, Farbe und Pfeil selbst,
+   der Grauton des Browsers kommt dort nie durch. Muss NACH select.ks-feld stehen. */
+.ks-feld:disabled{color:var(--still);cursor:default;background-image:none;opacity:1}
+
+/* Kleine Ausgabe für die Exemplar-Zeilen. Muss NACH den Basis-Regeln stehen: bei gleicher
+   Spezifitaet gewinnt die spaetere Regel, und select.ks-feld trägt 18 px. */
+.ks-feld--klein{width:100%;max-width:none;min-height:0}
+select.ks-feld--klein,input.ks-feld--klein{font-size:12px;font-weight:600;padding:6px 8px;min-height:0}
+select.ks-feld--klein{padding:6px 24px 6px 8px;background-position:right 7px center}
+
+/* Rueckmeldung nach dem Schreiben, an der Stelle, an der geändert wurde - dort schaut
+   man hin. Der Neuaufbau wird erzwungen und braucht unter 80 ms, darum gibt es keinen
+   "wird gespeichert"-Zustand mehr: man sieht direkt das Ergebnis.
+   ZWEI Bauformen, beide müssen leuchten: die Sprache sitzt in einer Kachel, alle
+   Exemplar-Felder in einer .ks-stueck-Zeile. Der Haken sass bis 15.09.2026 abends am
+   .ks-karte__detail - das haben weder die Sprache-Kachel noch die Exemplar-Zeilen, also
+   blieb die Meldung aus. Jetzt trägt ihn die Marke selbst (rahmen.js hängt sie an). */
+.ks-karte__kachel--gespeichert,.ks-stueck--gespeichert{position:relative;
+  border-color:var(--gruen)!important;box-shadow:0 0 0 1px var(--gruen);
+  transition:border-color .2s,box-shadow .2s}
+.ks-karte__kachel--gespeichert .ks-karte__detail{color:var(--hell)}
+/* Die Marke sitzt AUF der oberen Kante, nicht im Kasten: innen liegt sie sonst auf dem
+   ersten Feldnamen der Exemplar-Zeile (gemessen 15.09.2026 bei cqi 267: 201 px² über
+   "Zustand"). Auf der Kante deckt sie nur den Abstand zur Nachbarkachel ab. */
+.ks-gespeichert{position:absolute;top:-11px;right:10px;z-index:2;pointer-events:none;
+  font-size:11px;font-weight:700;color:var(--gruen);white-space:nowrap;
+  background:var(--buehne);border-radius:999px;padding:2px 9px}
+.ks-gespeichert::before{content:"✓";margin-right:6px;font-weight:800}
+.ks-karte__cm{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px;margin-top:10px}
+.ks-karte__cm-feld{background:var(--karte2);border:1px solid var(--kontur2);border-radius:var(--radius-innen);padding:8px 10px}
+.ks-karte__cm-label{font-size:11px;color:var(--still);text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+.ks-karte__cm-wert{font-size:14px;font-weight:800;color:var(--schrift);margin-top:4px;font-variant-numeric:tabular-nums}
+.ks-karte__cm-feld--aktiv{border-color:var(--blau1);background:rgba(59,130,246,.14)}
+.ks-karte__cm-feld--aktiv .ks-karte__cm-label{color:#93c5fd} .ks-karte__cm-feld--aktiv .ks-karte__cm-wert{color:var(--weiss)}
+.ks-karte__fuss{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:8px;flex-wrap:wrap;row-gap:10px}
+.ks-knopf{flex:none;font:inherit;font-size:12px;font-weight:700;color:var(--hell);padding:6px 12px;border:0;
+  border-radius:999px;background:linear-gradient(135deg,var(--blau1),var(--blau2));cursor:pointer;transition:filter .15s}
+.ks-knopf:hover{filter:brightness(1.12)}
+.ks-knopf--leise{background:var(--karte2);border:1px solid var(--kontur2);color:#c9c9c9}
+.ks-karte__bildbahn{padding:8px 24px 24px;align-self:stretch}
+/* Die Bahn zum Kleben: ohne align-self:stretch ist die Zelle nur so hoch wie das Bild
+   (gemessen 572 statt 908 px) und sticky hat keinen Weg. */
+.ks-karte__bildbahn>.ks-karte__bildbox{position:sticky;top:16px}
+.ks-karte__bildbox{position:relative;border-radius:18px;box-shadow:0 20px 50px rgba(0,0,0,.6);cursor:pointer;
+  transition:transform .5s cubic-bezier(.22,1,.36,1),box-shadow .4s;transform-origin:center;max-width:max-content;margin:0 auto}
+.ks-karte__bildbox:hover{transition:transform .18s ease-out,box-shadow .4s;box-shadow:0 34px 80px rgba(0,0,0,.75)}
+/* `cover` statt `contain` (19.09.2026, von Mark gemeldet: "beim kippen stimmt da was noch
+   nicht"). aspect-ratio 63/88 ist die echte Kartenproportion in Millimetern; die Scans von
+   TCGdex messen 600x825, also 0,7273 gegen 0,7159 - gut ein Prozent mehr Hoehe. Mit
+   `contain` blieben davon rund 6 px Hintergrundfarbe frei, und beim Kippen schaute genau
+   dieser Streifen mit der Rundung der Box hinter dem Bild hervor. `cover` schneidet den
+   einen Prozent am dunklen Kartenrand ab, wo ihn niemand vermisst. */
+.ks-karte__bild{display:block;width:100%;max-height:calc(100vh - 160px);aspect-ratio:63/88;object-fit:cover;border-radius:18px;background:var(--karte2)}
+.ks-karte__glanz{position:absolute;inset:0;border-radius:18px;pointer-events:none;opacity:0;mix-blend-mode:soft-light;transition:opacity .3s}
+.ks-karte__bildbox:hover .ks-karte__glanz{opacity:1}
+/* Klick aufs Kartenbild zeigt es gross. Die Lupe selbst liegt im Obsidian-Fenster
+   (siehe seite-karte.js), hier steht nur der Zeiger dafür. */
+.ks-karte__bildbox{cursor:zoom-in}
+
+.ks-karte__bild--leer{aspect-ratio:63/88;border:1px dashed var(--kontur);border-radius:18px;display:flex;
+  align-items:center;justify-content:center;text-align:center;color:var(--still);font-size:13px;padding:24px}
+
+/* ---- Karte anlegen (18.09.2026) ------------------------------------------------------------ */
+/* Formular und Trefferliste fuer "Karte anlegen" (Album, Inbox) und "Kennung suchen"
+   (Karten-Ansicht). HTML kommt aus rahmen.js (window.ksNeuHtml). Eigener Block, borgt
+   keine Zustandsklasse (Fehlermuster 9b); jede Flex- und Grid-Ebene traegt min-width:0. */
+.ks-kopf__rechts{display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-width:0}
+/* Flex statt Raster, damit "schmal" ueberhaupt etwas heissen kann (Durchgang 18,
+   Befund 8): ks-neu__feld--schmal stand an "Nummer" und "Sprache" im HTML und hatte keine
+   einzige Regel - alle vier Felder waren an jeder Pruefbreite gleich breit. Mit auto-fit
+   und 1fr ist das auch nicht zu aendern, jede Spur ist gleich breit. Dieselbe Bauform wie
+   .ks-stueck__felder daneben: gemeinsame Basis, schmale Felder mit kleinerer Basis, und
+   unter die Basis faellt die Zeile ohnehin um. */
+.ks-neu__felder{display:flex;flex-wrap:wrap;gap:8px 12px;min-width:0}
+.ks-neu__felder>*{min-width:0}
+.ks-neu__feld{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1 1 150px}
+/* 110 px und keine kleinere Basis: Die Sprachauswahl bringt eine eigene Mindestbreite mit -
+   ihre laengste Option ("Koreanisch") braucht mit Polster und Pfeil 100 px (gemessen an
+   einer Probe mit width:auto, nicht an der Tinte allein - Fehlermuster 3 und 13). Mit
+   Basis 96 stand sie bei 900 und 640 px auf 106/108 px, also sechs Pixel ueber der Kante.
+   Mit 110 bleiben es an jeder Pruefbreite ueber 113 px. */
+.ks-neu__feld--schmal{flex:1 1 110px}
+.ks-neu__feld>span{font-size:10px;font-weight:600;color:var(--still);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ks-neu__aktionen{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;min-width:0}
+.ks-neu__aktionen>*{min-width:0}
+.ks-neu__hinweis{font-size:12px;color:var(--still);overflow-wrap:anywhere}
+.ks-neu__hinweis--fehler{color:var(--rot)}
+/* laufende Suche oder laufendes Anlegen: kein zweiter Klick, sonst zwei Notizen */
+.ks-neu--laeuft .ks-knopf{opacity:.4;pointer-events:none}
+.ks-neu__treffer{margin-top:8px;min-width:0}
+.ks-neu__treffer-zeile{display:flex;align-items:center;gap:12px;padding:10px 8px;margin:0 -8px;
+  border-top:1px solid var(--kontur2);border-radius:var(--radius-innen);min-width:0;flex-wrap:wrap}
+.ks-neu__treffer-zeile>*{min-width:0}
+.ks-neu__bild{flex:none;width:44px;height:61px;object-fit:cover;border-radius:4px;background:var(--karte2);display:block}
+.ks-neu__text{flex:1 1 180px;display:flex;flex-direction:column;min-width:0}
+.ks-neu__name{font-size:14px;font-weight:600;overflow-wrap:anywhere}
+.ks-neu__orig{font-weight:500;color:var(--leise)}
+.ks-neu__meta{font-size:12px;color:var(--leise);overflow-wrap:anywhere}
+/* Schrumpfbar und umbrechend, nicht flex:none: Beim Bruchtest 375 px standen "schon in der
+   Sammlung", "Oeffnen" und "Exemplar hinzufuegen" 63 px ueber den Rand (gemessen 18.09.2026). */
+.ks-neu__knoepfe{flex:1 1 auto;display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;min-width:0}
+.ks-neu__da{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--still)}
+.ks-neu__mehr{font-size:12px;color:var(--still);padding:10px 0 0;overflow-wrap:anywhere}
+/* Textfeld in der Kachelreihe der Karten-Ansicht (Seltenheit, Set, Nummer): dieselbe Hoehe
+   und Schriftgroesse wie das Sprache-Auswahlfeld daneben (select.ks-feld, 46 px / 18 px),
+   nicht die 22 px der Zahlenfelder. Steht NACH .ks-feld und .ks-feld--klein (Fehlermuster 9). */
+.ks-karte__kachel--eingabe input.ks-feld--text{font-size:18px;font-weight:600;max-width:100%;min-height:46px;padding:8px 12px}
+
+/* Stift an Kachel-Label und Kopfzeile (18.09.2026): oeffnet Seltenheit, Set und Nummer
+   wieder zur Eingabe. Klein, leise, sitzt in der Zeile des Labels. */
+.ks-stift{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;margin-left:6px;
+  vertical-align:middle;border:1px solid var(--kontur2);border-radius:50%;background:var(--karte2);
+  color:var(--leise);cursor:pointer;padding:0;transition:color .15s,border-color .15s}
+.ks-stift:hover{color:var(--weiss);border-color:#4a4a4a}
+.ks-stift svg{display:block}
+
+/* ---- Inbox ------------------------------------------------------------------------------- */
+.ks-ablage{border:2px dashed var(--kontur);border-radius:var(--radius-innen);padding:48px 20px;text-align:center;color:var(--leise)}
+.ks-ablage--an{border-color:var(--blau);background:rgba(91,156,255,.06);color:var(--weiss)}
+.ks-ablage__aktionen{display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap}
+
+/* ---- Breiten ----------------------------------------------------------------------------- */
+/* Gemessen am Rahmen, nicht am Fenster. Die Umbrueche greifen dort, wo der Platz
+   wirklich knapp wird - unabhaengig von der Fensterbreite und davon, ob Obsidians
+   Seitenleisten offen stehen. Bezugsgroesse ist die Rahmenbreite: seit der Scrollbalken
+   im Rahmen ausgeblendet ist und .cm-scroller den reservierten Gutter nicht mehr
+   bekommt, ist das Fenster minus 108 - nachgemessen 15.09.2026 abends an allen neun
+   Pruefbreiten (2560->2452, 1920->1812, 1536->1428, 1280->1172, 1024->916, 900->792,
+   768->660, 640->532, 375->267), `100cqi` und `body.clientWidth` gleich auf den Pixel.
+   Bis zum 15.09.2026 mittags waren es 123, daher stehen in aelteren Notizen noch
+   1433 / 1147 / 923; zurueckgerechnet liegen die drei Stufen heute bei den
+   Fensterbreiten 1418 / 1132 / 908.
+   Die erste Stufe steht bewusst auf 1310 statt 1280: zwischen cqi 1281 und 1307 war
+   zweispaltig schon zu eng - die Anzeige-Spalte stand auf ihrem Minimum von 320 px und
+   das Bild fiel auf 327, während es ein Pixel schmaler (einspaltig) auf 447 sprang. */
+@container seite (max-width:1310px){ .ks-karte__oben{grid-template-columns:minmax(0,1fr)}
+  .ks-karte__bildbahn{max-width:520px;padding:16px 0 24px}
+  .ks-karte__bildbahn>.ks-karte__bildbox{position:static} }   /* einspaltig steht das Bild unten, Kleben wäre sinnlos */
+@container seite (max-width:1024px){
+  .ks-karte__bento{grid-template-columns:minmax(0,1fr)}          /* Bearbeiten unter die Angaben */
+  .ks-karte__bearbeiten{grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr))}
+}
+@container seite (max-width:800px){
+  .ks-seite{grid-template-columns:minmax(0,1fr);padding:12px 16px 40px}
+  .ks-navi{position:static;flex-direction:row;flex-wrap:wrap;justify-content:flex-start;padding:8px}
+  .ks-navi .ks-navi__gruppe,.ks-navi .ks-navi__trenner{display:none}
+  .ks-navi__punkt span{display:none}
+  .ks-navi__punkt{padding:10px 14px}
+  .ks-zeile .ks-zeile__rang{display:none}
+}
+
+/* Schalter für den Werbemodus in der Navi. Sieht aus wie ein Navi-Punkt, trägt aber
+   rechts eine Leuchte, die den Zustand zeigt - ein Punkt, der nichts öffnet, sondern
+   etwas umlegt, muss sich von den Links unterscheiden. */
+.ks-navi__schalter{width:100%;background:none;border:0;font:inherit;color:inherit;cursor:pointer;
+  text-align:left;position:relative}
+.ks-navi__leuchte{margin-left:auto;width:9px;height:9px;border-radius:50%;flex:none;
+  background:var(--kontur);box-shadow:inset 0 0 0 1px var(--kontur2);transition:background-color .2s ease}
+.ks-navi__schalter--an{color:var(--blau)}
+.ks-navi__schalter--an .ks-navi__leuchte{background:var(--blau);box-shadow:0 0 8px rgba(91,156,255,.55)}
+
+/* Im Werbemodus traegt die Ueberschrift "Sammlung" den Rueckweg: Sie ist der einzige
+   Knopf, der den Modus wieder beendet, und bleibt darum auch in der schmalen Icon-Leiste
+   stehen - sonst kaeme man aus einem schmalen Fenster nicht mehr heraus. */
+.ks-navi__gruppe[data-schalter]{cursor:pointer}
+
+/* Werbemodus an, aber keine eigenen Bilder da: Der Hinweis sitzt in der Navi und steht
+   damit auf jeder Seite. Ohne ihn blieben die Bildflaechen leer, und niemand erfuehre,
+   warum (gemeldet 16.09.2026). */
+.ks-navi__warnung{font-size:12px;line-height:1.45;color:var(--still);
+  background:rgba(91,156,255,.09);border:1px solid var(--kontur2);border-radius:10px;
+  padding:8px 10px;margin:0 0 4px;overflow-wrap:anywhere;min-width:0}
+
+/* Unterhalb der 800er-Stufe wird die Navi zur waagerechten Icon-Leiste. Der Schalter
+   trug dort weiter `width:100%` und stand als leerer Balken ueber die ganze Breite - mit
+   ausgeblendeter Beschriftung UND ausgeblendeter Leuchte, also ohne jede Aussage darueber,
+   ob der Modus an ist (gemeldet 16.09.2026). Die Leuchte bleibt stehen, die Breite richtet
+   sich nach dem Inhalt. Diese Regeln stehen bewusst NACH `.ks-navi__schalter` und
+   `.ks-navi__punkt span`: bei gleicher Spezifitaet gewinnt die spaetere (Fehlermuster 9). */
+@container seite (max-width:800px){
+  .ks-navi .ks-navi__gruppe[data-schalter]{display:flex;align-items:center;padding:0 8px}
+  .ks-navi__schalter{width:auto}
+  .ks-navi__schalter .ks-navi__leuchte{display:block;margin-left:4px}
+  .ks-navi__warnung{flex:1 1 100%;order:99}
+}
+
+/* ---- Erfolge ------------------------------------------------------------------------------- */
+/* Eine Liste von Zielen, die sich aus der Sammlung selbst errechnen. Erreichte Ziele
+   tragen links einen Haken, offene darunter eine Bahn mit dem Fortschritt. */
+.ks-erfolge{display:flex;flex-direction:column;gap:2px}
+.ks-erfolg{display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px;padding:12px 4px;border-top:1px solid var(--kontur2);min-width:0}
+/* Die Bahn bricht als eigene Zeile um und laeuft vom Textanfang (22 px Marke + 12 px Luecke)
+   bis zum rechten Rand - unter der Zahl hindurch (18.09.2026). */
+.ks-erfolg__bahn{flex:1 1 100%;margin-left:34px}
+.ks-erfolg:first-child{border-top:0}
+.ks-erfolg__marke{flex:none;width:22px;height:22px;margin-top:1px;border-radius:50%;
+  border:1px solid var(--kontur2);display:flex;align-items:center;justify-content:center;color:transparent}
+.ks-erfolg__marke svg{width:13px;height:13px}
+.ks-erfolg--fertig .ks-erfolg__marke{border-color:transparent;background:var(--blau);color:#0d1b30}
+.ks-erfolg__text{flex:1;min-width:0}
+.ks-erfolg__name{font-weight:700;color:var(--still);overflow-wrap:anywhere}
+.ks-erfolg--fertig .ks-erfolg__name{color:var(--weiss)}
+.ks-erfolg__satz{font-size:13px;color:var(--still);margin-top:2px;overflow-wrap:anywhere}
+.ks-erfolg__stand{flex:none;font-size:12px;font-weight:700;color:var(--still);
+  text-transform:uppercase;letter-spacing:.06em;margin-top:2px;font-variant-numeric:tabular-nums}
+.ks-erfolg--fertig .ks-erfolg__stand{color:var(--blau)}
+/* Funken um "geschafft" (18.09.2026, dritte Fassung - Marks Vorbild: cssscript.com/demo/
+   star-sparkle-text). Sterne werden von seite-erfolge.js fortlaufend erzeugt, jeder mit
+   Zufallsgroesse, -richtung, -dauer und -farbe, dreht sich im Flug, schrumpft und blendet
+   dabei EIN; am Ende seiner Lebensdauer wird er entfernt. Abweichungen vom Vorbild, den
+   Hausregeln wegen: Bewegung ueber transform (das Vorbild animiert left/top, das ruckelt),
+   Sternform per clip-path statt Kreis-Ausstanzung (die braucht die exakte Hintergrundfarbe),
+   Farben aus der eigenen Palette, hoechstens acht Sterne je Wort, nur im Bild. */
+.ks-erfolg__stand--fertig{position:relative;overflow:visible}
+.ks-funke{position:absolute;left:var(--x);top:50%;width:var(--groesse);height:var(--groesse);
+  margin:calc(var(--groesse) / -2) 0 0 calc(var(--groesse) / -2);pointer-events:none;
+  background:var(--farbe);opacity:0;
+  clip-path:polygon(50% 0,58% 42%,100% 50%,58% 58%,50% 100%,42% 58%,0 50%,42% 42%);
+  animation:ks-funke var(--leben) ease-in forwards}
+@keyframes ks-funke{
+  from{opacity:0;transform:translate(0,0) rotate(0deg) scale(1)}
+  to{opacity:1;transform:translate(var(--dx),var(--dy)) rotate(var(--drehung)) scale(.5)}
+}
+.ks-erfolg:not(.ks-erfolg--im-bild) .ks-funke{animation-play-state:paused}
+/* Plasma-Balken (Marks Wort 18.09.2026: "full width und so ein plasmastreifen der zum ende
+   hin brighter wird und brizzelt") - dieselbe Bauart wie der Strahl der Landingpage: die
+   Fuellung ist der Strahl (zum Ende hin heller), ::before der breite Schein, der atmet,
+   ::after der Kopf, der flackert. Nur auf der Erfolge-Seite; die Sets-Seite behaelt ihren
+   ruhigen Balken. Kein Blur, nur Verlauf, Maske und transform/opacity - und ausserhalb des
+   Bilds steht alles still (Klasse ks-erfolg--im-bild aus seite-erfolge.js). */
+/* margin-left 34 px steht HIER, nicht nur in .ks-erfolg__bahn: diese Regel hat zwei Klassen
+   und gewinnt sonst mit ihrem Kurzschreib-margin (Fehlermuster 9, gemessen 18.09.2026). */
+/* 5 px statt 8 seit 19.09.2026 (Marks Wort: "mache die anderen alle schmaeler") - damit
+   der Gesamtbalken im Kopf der staerkere bleibt, ohne selbst dicker zu werden. */
+.ks-erfolg .ks-sets__bahn{margin:0 0 2px 34px;max-width:none;height:5px;position:relative;overflow:visible;background:var(--kontur2)}
+/* clip-path statt overflow:hidden: schneidet Schein und Kopf am Fuellstand ab (Marks Wort
+   18.09.2026: "schneid das am ende weg"), laesst den Schein aber oben und unten 12 px
+   ueberstehen - overflow:hidden haette ihn auf die 8 px des Balkens gestutzt. */
+/* Seit 18.09.2026 auch auf der Sets-Seite (Marks Wort "hier auch plasma"): dieselben Regeln
+   fuer .ks-sets__eintrag, Pause ueber ks-sets__eintrag--im-bild aus seite-sets.js. */
+/* Seit 18.09.2026 abends haengt Plasma an der Fuellung selbst statt an drei Elternklassen
+   (Erfolg-Eintrag, Set-Eintrag, Erfolge-Kopf) - es gibt im ganzen Vault nur diese eine
+   Bahn-Bauart, und jede von ihnen soll Plasma sein. Eine-Stelle-Regel, Fehlermuster 17. */
+.ks-sets__fuellung{position:relative;overflow:visible;border-radius:99px;clip-path:inset(-12px 0 -12px 0 round 99px);
+  background:linear-gradient(90deg,#2f4a7a 0%,#1e5bd8 34%,#5b9cff 70%,#8fe8ff 100%)}
+.ks-sets__fuellung::before{content:"";position:absolute;left:0;right:0;top:50%;height:22px;margin-top:-11px;
+  border-radius:99px;pointer-events:none;
+  background:linear-gradient(90deg,transparent 6%,rgba(30,91,216,.4) 38%,rgba(91,156,255,.62) 74%,rgba(143,232,255,.8) 100%);
+  -webkit-mask-image:linear-gradient(180deg,transparent 0%,#000 50%,transparent 100%);
+  mask-image:linear-gradient(180deg,transparent 0%,#000 50%,transparent 100%);
+  transform-origin:left center;animation:ks-plasma-atem 2.6s ease-in-out infinite}
+.ks-sets__fuellung::after{content:"";position:absolute;right:0;top:50%;width:104px;height:12px;margin-top:-6px;
+  pointer-events:none;
+  /* Kern sitzt am rechten Rand (96 %), das Leuchten zieht nach hinten in den Balken */
+  background:radial-gradient(60% 50% at 96% 50%,rgba(215,248,255,.95) 0%,rgba(143,232,255,.45) 30%,rgba(91,156,255,.16) 60%,transparent 80%);
+  animation:ks-plasma-flackern 1.1s steps(6,end) infinite}
+/* Bei Balken unter 40 px Breite saesse der Kopf links ausserhalb - dann bleibt er weg */
+.ks-sets__fuellung[style*="width:0"]::after{display:none}
+/* Aussen vor dem Bild steht alles still (Performance-Regel). Voreinstellung ist Pause; der
+   Lauf wird erst freigeschaltet, wenn ein Vorfahre im Bild ist - die Liste der Vorfahren ist
+   die EINE Stelle dafuer. :where() zaehlt nicht zur Spezifitaet, die Lauf-Regel gewinnt
+   allein dadurch, dass sie spaeter steht. */
+.ks-sets__fuellung::before,.ks-sets__fuellung::after{animation-play-state:paused}
+:where(.ks-erfolg--im-bild,.ks-sets__eintrag--im-bild) .ks-sets__fuellung::before,
+:where(.ks-erfolg--im-bild,.ks-sets__eintrag--im-bild) .ks-sets__fuellung::after{animation-play-state:running}
+.ks-sets__eintrag .ks-sets__bahn{overflow:visible;position:relative}
+/* Der Gesamtbalken im Kopf der Erfolge-Seite (Marks Wort 18.09.2026: "hier brauchen wir auch
+   eine balken") - eigene Zeile unter Titel und Prozentzeile. Er traegt die Lauf-Klasse
+   selbst, weil er kein Ziel-Eintrag ist (seite-erfolge.js).
+   Seit 19.09.2026 hebt er sich von den Ziel-Bahnen ab (Marks Wort: "sie ist eine ganz
+   besondere bar"). Nicht ueber seine eigene Hoehe - die bleibt bei 8 px, der erste Bau mit
+   15 px war Marks Wort nach zu dick ("mach ihn so gross wie davor und mache die anderen
+   alle schmaeler"). Er steht stattdessen in einer vertieften Rinne mit hellem Rand, und die
+   Balken der einzelnen Ziele sind auf 5 px zurueckgenommen. Er fasst alle 25 Ziele
+   zusammen - die darunter je eines. */
+.ks-kopf__bahn{flex:1 1 100%;height:8px;margin:12px 0 2px;overflow:visible;position:relative;
+  background:#0c0c0c;border:1px solid rgba(255,255,255,.07);border-radius:99px;
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.8)}
+@keyframes ks-plasma-atem{0%,100%{transform:scaleY(1);opacity:.85}50%{transform:scaleY(1.35);opacity:1}}
+@keyframes ks-plasma-flackern{0%,100%{opacity:.72}30%{opacity:.98}55%{opacity:.55}80%{opacity:.9}}
+@media (prefers-reduced-motion:reduce){
+  .ks-sets__fuellung::before,.ks-sets__fuellung::after{animation:none;opacity:.8}
+}
+@media (prefers-reduced-transparency:reduce){
+  .ks-sets__fuellung::before,.ks-sets__fuellung::after{display:none}
+}
+
+/* ---- Aktualisieren (19.09.2026) ------------------------------------------------------------ */
+/* Die Standzeile im Block „Was Updates angeht" auf der Ueber-Seite. Vier Zustaende, und die
+   Farbe sagt, welcher: blau, wenn es etwas Neues gibt, gruen wenn alles aktuell ist, grau
+   waehrend es laeuft, und leise-grau, wenn nichts zu holen war. Kein Rot: Ein Update, das
+   nicht gefunden wird, ist kein Fehler des Kaeufers und keine Warnung wert. */
+.ks-ausgabe{display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;row-gap:10px;
+  margin-top:14px;padding:14px 16px;border-radius:var(--radius-innen);
+  font-size:13.5px;line-height:1.55;color:var(--leise);
+  border:1px solid var(--kontur2);background:var(--karte2)}
+.ks-ausgabe>span{flex:1 1 260px;min-width:0}
+.ks-ausgabe strong{color:var(--weiss)}
+.ks-ausgabe ul{margin:8px 0 0;padding-left:18px}
+.ks-ausgabe li{margin-bottom:4px}
+.ks-ausgabe .ks-knopf{flex:none;align-self:center}
+.ks-ausgabe--neu{border-color:var(--blau1);background:rgba(59,130,246,.12)}
+.ks-ausgabe--neu strong{color:var(--hell)}
+.ks-ausgabe--aktuell{border-color:rgba(81,207,102,.32)}
+.ks-ausgabe--aktuell strong{color:var(--gruen)}
+.ks-ausgabe--laeuft{color:var(--still)}
+.ks-ausgabe--still{color:var(--still)}

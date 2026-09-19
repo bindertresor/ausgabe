@@ -1,0 +1,23 @@
+{
+ "ausgabe": "1.1",
+ "datum": "2026-09-19",
+ "neu": [
+  "Die Kachel „Preise zuletzt aktualisiert“ fror ein, sobald eine Karte keinen Cardmarket-Preis hatte.",
+  "Karten ohne Preis bekamen kein Kartenbild.",
+  "Die Start-Seite und die Über-Seite nannten Zahlen, die den anderen Ansichten widersprachen.",
+  "Neu: Der Vault sieht auf Knopfdruck nach, ob es eine neuere Ausgabe gibt."
+ ],
+ "dateien": [
+  "oberflaeche.css",
+  "preise.py",
+  "rahmen.js",
+  "seite-album.js",
+  "seite-dashboard.js",
+  "seite-erfolge.js",
+  "seite-inbox.js",
+  "seite-karte.js",
+  "seite-sets.js",
+  "seite-start.js",
+  "seite-ueber.js"
+ ]
+}
